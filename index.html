@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LunarMapper - Turn Shadows into Elevation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/three@0.137.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style id="app-style">
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Titillium+Web:wght@300;400;600;700&display=swap');
+    
+    :root {
+      --primary-dark: #0a1128;
+      --secondary-dark: #1c2541;
+      --accent-blue: #00f2ff;
+      --accent-orange: #ff7b00;
+      --text-light: #e6f1ff;
+      --text-muted: #94a3b8;
+    }
+    
+    body {
+      font-family: 'Titillium Web', sans-serif;
+      background-color: var(--primary-dark);
+      color: var(--text-light);
+      background-image: url('https://cdn.pixabay.com/photo/2019/03/23/20/01/space-4075955_1280.jpg');
+      background-size: cover;
+      background-attachment: fixed;
+      background-position: center;
+      min-height: 100vh;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Space Mono', monospace;
+    }
+    
+    .moon-texture {
+      background-image: url('https://cdn.pixabay.com/photo/2018/03/14/15/51/moon-3225404_1280.jpg');
+      background-size: cover;
+      background-position: center;
+      opacity: 0.1;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      border-radius: inherit;
+    }
+    
+    .nav-item {
+      position: relative;
+      transition: all 0.3s ease;
+      border-left: 3px solid transparent;
+    }
+    
+    .nav-item:hover, .nav-item.active {
+      background-color: rgba(255, 255, 255, 0.05);
+      border-left: 3px solid var(--accent-blue);
+    }
+    
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+      width: 3px;
+      background-color: var(--accent-orange);
+    }
+    
+    .glow-blue {
+      box-shadow: 0 0 15px 0 rgba(0, 242, 255, 0.5);
+      border: 1px solid var(--accent-blue);
+    }
+    
+    .glow-orange {
+      box-shadow: 0 0 15px 0 rgba(255, 123, 0, 0.5);
+      border: 1px solid var(--accent-orange);
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, rgba(0, 242, 255, 0.8), rgba(0, 242, 255, 0.4));
+      color: #fff;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .btn-primary:hover {
+      background: linear-gradient(135deg, rgba(0, 242, 255, 1), rgba(0, 242, 255, 0.7));
+      transform: translateY(-2px);
+    }
+    
+    .btn-secondary {
+      background: linear-gradient(135deg, rgba(255, 123, 0, 0.8), rgba(255, 123, 0, 0.4));
+      color: #fff;
+      transition: all 0.3s;
+    }
+    
+    .btn-secondary:hover {
+      background: linear-gradient(135deg, rgba(255, 123, 0, 1), rgba(255, 123, 0, 0.7));
+      transform: translateY(-2px);
+    }
+    
+    .card {
+      background-color: var(--secondary-dark);
+      border-radius: 8px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+    
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+    }
+    
+    .upload-zone {
+      border: 2px dashed var(--accent-blue);
+      background-color: rgba(0, 242, 255, 0.05);
+      transition: all 0.3s ease;
+    }
+    
+    .upload-zone:hover, .upload-zone.dragover {
+      background-color: rgba(0, 242, 255, 0.1);
+      border-color: var(--accent-orange);
+    }
+    
+    .slider {
+      -webkit-appearance: none;
+      height: 5px;
+      background: linear-gradient(90deg, var(--primary-dark), var(--accent-blue));
+      border-radius: 5px;
+      outline: none;
+    }
+    
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(0, 242, 255, 0.8);
+    }
+    
+    .slider::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(0, 242, 255, 0.8);
+    }
+    
+    #moonViewer {
+      width: 100%;
+      height: 300px;
+      background-color: #000;
+      border-radius: 8px;
+    }
+
+    #demViewer {
+      width: 100%;
+      height: 400px;
+      background-color: #000;
+      border-radius: 8px;
+    }
+    
+    .page-content {
+      display: none;
+    }
+    
+    .page-content.active {
+      display: block;
+      animation: fadeIn 0.5s ease-in-out;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    .progress-bar {
+      height: 6px;
+      background: linear-gradient(90deg, var(--accent-blue), var(--accent-orange));
+      border-radius: 3px;
+      transition: width 0.5s ease-in-out;
+    }
+    
+    .rotate-on-hover:hover {
+      animation: rotate 5s linear infinite;
+    }
+    
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    
+    .logo-glow {
+      text-shadow: 0 0 8px #fbbf24, 0 0 16px #6366f1;
+    }
+    
+    /* Toggle Switch Styling */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 30px;
+    }
+    
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .switch-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--primary-dark);
+      transition: .4s;
+      border-radius: 34px;
+    }
+    
+    .switch-slider:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    
+    input:checked + .switch-slider {
+      background-color: var(--accent-blue);
+    }
+    
+    input:checked + .switch-slider:before {
+      transform: translateX(30px);
+    }
+    
+    .pulse {
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(0, 242, 255, 0.7);
+      }
+      70% {
+        box-shadow: 0 0 0 10px rgba(0, 242, 255, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(0, 242, 255, 0);
+      }
+    }
+    
+    /* Loading indicator */
+    .processing-indicator {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      border-radius: 8px;
+    }
+    
+    .lds-ring {
+      display: inline-block;
+      position: relative;
+      width: 80px;
+      height: 80px;
+    }
+    .lds-ring div {
+      box-sizing: border-box;
+      display: block;
+      position: absolute;
+      width: 64px;
+      height: 64px;
+      margin: 8px;
+      border: 8px solid var(--accent-blue);
+      border-radius: 50%;
+      animation: lds-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+      border-color: var(--accent-blue) transparent transparent transparent;
+    }
+    .lds-ring div:nth-child(1) {
+      animation-delay: -0.45s;
+    }
+    .lds-ring div:nth-child(2) {
+      animation-delay: -0.3s;
+    }
+    .lds-ring div:nth-child(3) {
+      animation-delay: -0.15s;
+    }
+    @keyframes lds-ring {
+      0% {
+        transform: rotate(0deg);
+      }
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+    
+    /* Add CSS for icon gradient style */
+    .text-gradient-blue-orange {
+      background: linear-gradient(90deg, #6366f1 0%, #fbbf24 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-fill-color: transparent;
+    }
+</style>
+</head>
+<body class="overflow-x-hidden">
+  <div class="min-h-screen flex">
+    <!-- Sidebar -->
+    <nav class="w-64 bg-gradient-to-b from-gray-900 to-gray-800 flex-shrink-0 hidden md:block">
+      <div class="p-4 flex items-center">
+        <!-- Replace image with Font Awesome icon -->
+        <i class="fas fa-moon logo-glow text-3xl text-gradient-blue-orange"></i>
+        <div class="ml-3">
+          <h1 class="text-xl font-bold text-white tracking-wider">LunarMapper</h1>
+          <p class="text-xs text-blue-300">v1.0.0 Beta</p>
+        </div>
+      </div>
+      <div class="mt-4">
+        <div class="nav-item active p-4 cursor-pointer" data-page="upload">
+          <div class="flex items-center">
+            <i class="fas fa-upload mr-3 text-blue-400"></i>
+            <span>Upload & Preprocess</span>
+          </div>
+        </div>
+        <div class="nav-item p-4 cursor-pointer" data-page="disparity">
+          <div class="flex items-center">
+            <i class="fas fa-map mr-3 text-blue-400"></i>
+            <span>Disparity Map</span>
+          </div>
+        </div>
+        <div class="nav-item p-4 cursor-pointer" data-page="dem">
+          <div class="flex items-center">
+            <i class="fas fa-mountain mr-3 text-blue-400"></i>
+            <span>DEM Refinement</span>
+          </div>
+        </div>
+        <div class="nav-item p-4 cursor-pointer" data-page="validation">
+          <div class="flex items-center">
+            <i class="fas fa-check-circle mr-3 text-blue-400"></i>
+            <span>Validation & Export</span>
+          </div>
+        </div>
+        <div class="nav-item p-4 cursor-pointer" data-page="collaboration">
+          <div class="flex items-center">
+            <i class="fas fa-users mr-3 text-blue-400"></i>
+            <span>Collaboration & Share</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="absolute bottom-0 left-0 right-0 p-4">
+        <div class="text-center">
+          <p class="text-xs text-gray-400 mb-2">Powered by</p>
+          <div class="flex justify-center space-x-3">
+            <!-- Replace NASA logo with icon -->
+            <i class="fas fa-rocket h-6 opacity-50 hover:opacity-100 transition-opacity text-blue-400"></i>
+            <!-- Replace JAXA logo with icon -->
+            <i class="fas fa-space-shuttle h-6 opacity-50 hover:opacity-100 transition-opacity text-orange-400"></i>
+          </div>
+        </div>
+      </div>
+    </nav>
+    
+    <!-- Mobile Nav -->
+    <div class="md:hidden fixed top-0 left-0 right-0 bg-gray-900 p-4 z-50">
+      <div class="flex justify-between items-center">
+        <div class="flex items-center">
+          <!-- Replace image with Font Awesome icon -->
+          <i class="fas fa-moon logo-glow text-3xl text-gradient-blue-orange"></i>
+          <h1 class="text-lg font-bold text-white ml-2">LunarMapper</h1>
+        </div>
+        <button id="mobile-menu-toggle" class="text-white">
+          <i class="fas fa-bars text-xl"></i>
+        </button>
+      </div>
+    </div>
+    
+    <div id="mobile-menu" class="hidden md:hidden fixed top-16 left-0 right-0 bg-gray-900 z-40 border-t border-gray-700">
+      <div class="nav-item active p-4 cursor-pointer" data-page="upload">
+        <div class="flex items-center">
+          <i class="fas fa-upload mr-3 text-blue-400"></i>
+          <span>Upload & Preprocess</span>
+        </div>
+      </div>
+      <div class="nav-item p-4 cursor-pointer" data-page="disparity">
+        <div class="flex items-center">
+          <i class="fas fa-map mr-3 text-blue-400"></i>
+          <span>Disparity Map</span>
+        </div>
+      </div>
+      <div class="nav-item p-4 cursor-pointer" data-page="dem">
+        <div class="flex items-center">
+          <i class="fas fa-mountain mr-3 text-blue-400"></i>
+          <span>DEM Refinement</span>
+        </div>
+      </div>
+      <div class="nav-item p-4 cursor-pointer" data-page="validation">
+        <div class="flex items-center">
+          <i class="fas fa-check-circle mr-3 text-blue-400"></i>
+          <span>Validation & Export</span>
+        </div>
+      </div>
+      <div class="nav-item p-4 cursor-pointer" data-page="collaboration">
+        <div class="flex items-center">
+          <i class="fas fa-users mr-3 text-blue-400"></i>
+          <span>Collaboration & Share</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-grow p-4 md:p-8 md:pt-6 overflow-y-auto mt-16 md:mt-0">
+      <div class="mb-6">
+        <h1 class="text-2xl md:text-3xl font-bold">
+          <span class="text-blue-400">Lunar</span><span class="text-orange-400">Mapper</span>
+        </h1>
+        <p class="text-gray-400 italic">Turn Shadows into Elevation: High-Resolution Lunar DEMs from Single Images</p>
+      </div>
+      
+      <!-- Progress Bar -->
+      <div class="mb-8 bg-gray-800 rounded-full h-2 overflow-hidden">
+        <div class="progress-bar" style="width: 20%;"></div>
+      </div>
+      
+      <!-- Upload & Preprocess Page -->
+      <div id="upload-page" class="page-content active">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2">
+            <div class="card p-6 mb-6">
+              <div class="moon-texture"></div>
+              <h2 class="text-xl font-semibold mb-4 flex items-center">
+                <i class="fas fa-upload mr-2 text-blue-400"></i>
+                Upload Lunar Image
+              </h2>
+              
+              <div id="upload-zone" class="upload-zone rounded-lg p-8 text-center cursor-pointer mb-4">
+                <i class="fas fa-cloud-upload-alt text-5xl mb-4 text-blue-400"></i>
+                <p class="mb-2">Drag & drop your lunar image here</p>
+                <p class="text-sm text-gray-400">Supported formats: TIFF, PNG, JPG</p>
+                <input type="file" id="file-input" class="hidden" accept=".tiff,.tif,.png,.jpg,.jpeg">
+                <button class="mt-4 px-4 py-2 bg-blue-900 hover:bg-blue-800 rounded-md text-sm">
+                  <i class="fas fa-folder-open mr-2"></i>Browse Files
+                </button>
+              </div>
+              
+              <div id="image-preview" class="hidden mb-4">
+                <div class="relative">
+                  <img id="preview-img" src="" alt="Preview" class="w-full rounded-lg">
+                  <button id="remove-image" class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 w-8 h-8 flex items-center justify-center">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+                <p id="file-name" class="text-sm text-gray-400 mt-2"></p>
+              </div>
+            </div>
+            
+            <div class="card p-6">
+              <div class="moon-texture"></div>
+              <h2 class="text-xl font-semibold mb-4 flex items-center">
+                <i class="fas fa-globe-moon mr-2 text-blue-400"></i>
+                3D Moon Globe
+              </h2>
+              
+              <div id="moonViewer" class="glow-blue mb-4"></div>
+              <p class="text-sm text-gray-400 text-center">Drag to rotate • Scroll to zoom</p>
+            </div>
+          </div>
+          
+          <div class="lg:col-span-1">
+            <div class="card p-6 mb-6">
+              <div class="moon-texture"></div>
+              <h2 class="text-xl font-semibold mb-4 flex items-center">
+                <i class="fas fa-info-circle mr-2 text-blue-400"></i>
+                Image Metadata
+              </h2>
+              
+              <form id="metadata-form">
+                <div class="mb-4">
+                  <label class="block text-sm font-medium mb-1">Solar Angle (°)</label>
+                  <input type="number" class="w-full px-3 py-2 bg-gray-800 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="e.g., 45" required>
+                </div>
+                
+                <div class="mb-4">
+                  <label class="block text-sm font-medium mb-1">Viewing Geometry (°)</label>
+                  <input type="number" class="w-full px-3 py-2 bg-gray-800 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="e.g., 90" required>
+                </div>
+                
+                <div class="mb-4">
+                  <label class="block text-sm font-medium mb-1">Lunar Coordinates</label>
+                  <div class="grid grid-cols-2 gap-2">
+                    <input type="text" class="px-3 py-2 bg-gray-800 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Latitude" required>
+                    <input type="text" class="px-3 py-2 bg-gray-800 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="Longitude" required>
+                  </div>
+                </div>
+                
+                <div class="mb-6">
+                  <label class="block text-sm font-medium mb-1">Image Source</label>
+                  <select class="w-full px-3 py-2 bg-gray-800 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <option>LRO NAC</option>
+                    <option>Chandrayaan-2 TMC</option>
+                    <option>SELENE Terrain Camera</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+                
+                <button type="button" id="validate-btn" class="w-full btn-primary rounded-lg py-3 px-4 font-bold flex items-center justify-center">
+                  <i class="fas fa-check-circle mr-2"></i> Validate & Detect Shadows
+                </button>
+              </form>
+            </div>
+            
+            <div class="card p-6">
+              <div class="moon-texture"></div>
+              <h2 class="text-xl font-semibold mb-4 flex items-center">
+                <i class="fas fa-history mr-2 text-blue-400"></i>
+                Recent Projects
+              </h2>
+              
+              <div id="recent-projects" class="space-y-3">
+                <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg hover:bg-gray-700 cursor-pointer">
+                  <div>
+                    <p class="font-medium">Tycho Crater Analysis</p>
+                    <p class="text-xs text-gray-400">Last modified: Yesterday</p>
+                  </div>
+                  <i class="fas fa-chevron-right text-gray-400"></i>
+                </div>
+                <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg hover:bg-gray-700 cursor-pointer">
+                  <div>
+                    <p class="font-medium">Mare Tranquillitatis</p>
+                    <p class="text-xs text-gray-400">Last modified: 3 days ago</p>
+                  </div>
+                  <i class="fas fa-chevron-right text-gray-400"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Disparity Map Page -->
+      <div id="disparity-page" class="page-content">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="card p-6 relative">
+            <div class="moon-texture"></div>
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+              <i class="fas fa-image mr-2 text-blue-400"></i>
+              Original Image
+            </h2>
+            <img id="original-image" src="https://cdn.pixabay.com/photo/2016/09/09/13/03/moon-1656686_1280.jpg" alt="Original lunar image" class="w-full h-auto rounded-lg mb-4">
+            <div class="mb-4">
+              <p class="text-sm mb-1">Brightness Adjustment</p>
+              <input type="range" min="0" max="200" value="100" class="slider w-full" id="brightness-slider">
+            </div>
+            <div>
+              <p class="text-sm mb-1">Contrast Adjustment</p>
+              <input type="range" min="0" max="200" value="100" class="slider w-full" id="contrast-slider">
+            </div>
+          </div>
+          
+          <div class="card p-6 relative">
+            <div class="moon-texture"></div>
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+              <i class="fas fa-map-marked-alt mr-2 text-orange-400"></i>
+              Disparity Map Preview
+            </h2>
+            <div class="bg-gray-800 rounded-lg flex items-center justify-center h-64 mb-4" id="disparity-preview">
+              <p class="text-gray-400">Run photoclinometry to generate disparity map</p>
+            </div>
+            <div id="disparity-controls" class="hidden">
+              <div class="mb-4">
+                <p class="text-sm mb-1">Depth Scale</p>
+                <input type="range" min="1" max="100" value="50" class="slider w-full" id="depth-slider">
+              </div>
+              <div>
+                <p class="text-sm mb-1">Edge Enhancement</p>
+                <input type="range" min="0" max="100" value="30" class="slider w-full" id="edge-slider">
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="card p-6 mt-6 relative">
+          <div class="moon-texture"></div>
+          <h2 class="text-xl font-semibold mb-4 flex items-center">
+            <i class="fas fa-cogs mr-2 text-blue-400"></i>
+            Photoclinometry Settings
+          </h2>
+          
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div>
+              <label class="block text-sm font-medium mb-1">Algorithm</label>
+              <select class="w-full px-3 py-2 bg-gray-800 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <option>Standard SfS (Shape from Shading)</option>
+                <option>Enhanced Horn Method</option>
+                <option>Deep Learning Augmented</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Resolution Level</label>
+              <select class="w-full px-3 py-2 bg-gray-800 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <option>High (Slower Processing)</option>
+                <option selected>Medium</option>
+                <option>Low (Faster Processing)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Shadow Handling</label>
+              <select class="w-full px-3 py-2 bg-gray-800 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <option>Smart Shadow Interpolation</option>
+                <option>Ignore Shadow Regions</option>
+                <option>Deep Shadow Enhancement</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="flex justify-center">
+            <button id="run-photoclinometry" class="btn-primary rounded-lg py-3 px-8 font-bold flex items-center justify-center">
+              <i class="fas fa-play mr-2"></i> Run Photoclinometry
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- DEM Refinement Page -->
+      <div id="dem-page" class="page-content">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2">
+            <div class="card p-6 relative">
+              <div class="moon-texture"></div>
+              <h2 class="text-xl font-semibold mb-4 flex items-center">
+                <i class="fas fa-cube mr-2 text-blue-400"></i>
+                3D Terrain Model
+              </h2>
+              <div id="demViewer" class="glow-blue"></div>
+            </div>
+          </div>
+          
+          <div class="lg:col-span-1">
+            <div class="card p-6 mb-6 relative">
+              <div class="moon-texture"></div>
+              <h2 class="text-xl font-semibold mb-4 flex items-center">
+                <i class="fas fa-sliders-h mr-2 text-blue-400"></i>
+                Refinement Options
+              </h2>
+              
+              <div class="mb-4 flex justify-between items-center">
+                <span>Sub-Pixel Refinement</span>
+                <label class="switch">
+                  <input type="checkbox" id="sub-pixel-toggle">
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+              
+              <div class="mb-4 flex justify-between items-center">
+                <span>ML Edge Sharpening</span>
+                <label class="switch">
+                  <input type="checkbox" id="ml-edge-toggle" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+              
+              <div class="mb-4 flex justify-between items-center">
+                <span>Noise Reduction</span>
+                <label class="switch">
+                  <input type="checkbox" id="noise-toggle" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+              
+              <div class="mb-6">
+                <label class="block text-sm font-medium mb-1">Output Resolution (m/pixel)</label>
+                <select class="w-full px-3 py-2 bg-gray-800 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                  <option>0.5 m/pixel (Ultra High)</option>
+                  <option selected>1.0 m/pixel (High)</option>
+                  <option>2.0 m/pixel (Medium)</option>
+                  <option>5.0 m/pixel (Low)</option>
+                </select>
+              </div>
+              
+              <button id="refine-dem" class="w-full btn-primary rounded-lg py-3 px-4 font-bold flex items-center justify-center mb-4">
+                <i class="fas fa-magic mr-2"></i> Refine DEM
+              </button>
+            </div>
+            
+            <div class="card p-6 relative">
+              <div class="moon-texture"></div>
+              <h2 class="text-xl font-semibold mb-4 flex items-center">
+                <i class="fas fa-download mr-2 text-orange-400"></i>
+                Export Options
+              </h2>
+              
+              <div class="space-y-3">
+                <a href="javascript:void(0)" class="block p-3 bg-gray-800 rounded-lg hover:bg-gray-700 flex items-center">
+                  <i class="fas fa-file-image text-blue-400 text-xl mr-3"></i>
+                  <div>
+                    <p class="font-medium">GeoTIFF DEM</p>
+                    <p class="text-xs text-gray-400">Full resolution elevation model</p>
+                  </div>
+                </a>
+                
+                <a href="javascript:void(0)" class="block p-3 bg-gray-800 rounded-lg hover:bg-gray-700 flex items-center">
+                  <i class="fas fa-cube text-blue-400 text-xl mr-3"></i>
+                  <div>
+                    <p class="font-medium">3D Model (.obj)</p>
+                    <p class="text-xs text-gray-400">For 3D printing or visualization</p>
+                  </div>
+                </a>
+                
+                <a href="javascript:void(0)" class="block p-3 bg-gray-800 rounded-lg hover:bg-gray-700 flex items-center">
+                  <i class="fas fa-map text-blue-400 text-xl mr-3"></i>
+                  <div>
+                    <p class="font-medium">QGIS Project</p>
+                    <p class="text-xs text-gray-400">Ready-to-use GIS package</p>
+                  </div>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Validation Page -->
+      <div id="validation-page" class="page-content">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="card p-6 relative">
+            <div class="moon-texture"></div>
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+              <i class="fas fa-check-double mr-2 text-blue-400"></i>
+              Validation Controls
+            </h2>
+            
+            <div class="mb-6">
+              <p class="mb-2">Upload Reference DEM (Optional)</p>
+              <div class="upload-zone rounded-lg p-4 text-center cursor-pointer">
+                <i class="fas fa-file-upload text-2xl mb-2 text-blue-400"></i>
+                <p class="text-sm">Drag & drop reference DEM file or click to browse</p>
+                <input type="file" id="reference-dem-input" class="hidden" accept=".tif,.tiff">
+              </div>
+            </div>
+            
+            <div class="mb-6">
+              <p class="mb-2">Reference Dataset</p>
+              <select class="w-full px-3 py-2 bg-gray-800 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <option>LRO LOLA Altimetry</option>
+                <option>Chandrayaan-1 TMC DEMs</option>
+                <option>SELENE Terrain Camera DEMs</option>
+                <option>Custom Reference</option>
+              </select>
+            </div>
+            
+            <button id="run-validation" class="w-full btn-primary rounded-lg py-3 px-4 font-bold flex items-center justify-center mb-4">
+              <i class="fas fa-chart-bar mr-2"></i> Run Validation Analysis
+            </button>
+          </div>
+          
+          <div class="card p-6 relative">
+            <div class="moon-texture"></div>
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+              <i class="fas fa-chart-line mr-2 text-orange-400"></i>
+              Accuracy Metrics
+            </h2>
+            
+            <div id="accuracy-chart" class="w-full h-64 bg-gray-800 rounded-lg mb-4 flex items-center justify-center">
+              <p class="text-gray-400">Run validation to see metrics</p>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-4">
+              <div class="bg-gray-800 p-3 rounded-lg">
+                <p class="text-sm text-gray-400">RMSE</p>
+                <p class="text-2xl font-bold" id="rmse-value">--</p>
+              </div>
+              <div class="bg-gray-800 p-3 rounded-lg">
+                <p class="text-sm text-gray-400">Mean Error</p>
+                <p class="text-2xl font-bold" id="mean-error-value">--</p>
+              </div>
+              <div class="bg-gray-800 p-3 rounded-lg">
+                <p class="text-sm text-gray-400">Max Difference</p>
+                <p class="text-2xl font-bold" id="max-diff-value">--</p>
+              </div>
+              <div class="bg-gray-800 p-3 rounded-lg">
+                <p class="text-sm text-gray-400">Elevation Range</p>
+                <p class="text-2xl font-bold" id="elev-range-value">--</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="card p-6 mt-6 relative">
+          <div class="moon-texture"></div>
+          <h2 class="text-xl font-semibold mb-4 flex items-center">
+            <i class="fas fa-map-marked mr-2 text-blue-400"></i>
+            Comparison View
+          </h2>
+          
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div id="dem-comparison" class="bg-gray-800 rounded-lg p-4 flex items-center justify-center min-h-[300px]">
+              <p class="text-gray-400">DEM comparison visualization will appear here</p>
+            </div>
+            <div id="difference-map" class="bg-gray-800 rounded-lg p-4 flex items-center justify-center min-h-[300px]">
+              <p class="text-gray-400">Difference map will appear here</p>
+            </div>
+          </div>
+          
+          <div class="mt-6 flex justify-center">
+            <button id="generate-report" class="btn-secondary rounded-lg py-3 px-8 font-bold flex items-center justify-center">
+              <i class="fas fa-file-pdf mr-2"></i> Generate PDF Report
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Collaboration Page -->
+      <div id="collaboration-page" class="page-content">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2">
+            <div class="card p-6 relative">
+              <div class="moon-texture"></div>
+              <h2 class="text-xl font-semibold mb-4 flex items-center">
+                <i class="fas fa-users mr-2 text-blue-400"></i>
+                Share Project
+              </h2>
+              
+              <div class="mb-6">
+                <label class="block text-sm font-medium mb-2">Add Collaborators</label>
+                <div class="flex">
+                  <input type="email" placeholder="Email address" class="flex-grow px-3 py-2 bg-gray-800 rounded-l border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                  <button class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r">
+                    <i class="fas fa-plus"></i>
+                  </button>
+                </div>
+              </div>
+              
+              <div class="mb-6">
+                <label class="block text-sm font-medium mb-2">Project Link</label>
+                <div class="flex">
+                  <input type="text" value="https://lunarmapper.io/project/1234-abcd" readonly class="flex-grow px-3 py-2 bg-gray-800 rounded-l border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                  <button class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-r">
+                    <i class="fas fa-copy"></i>
+                  </button>
+                </div>
+                <div class="mt-2 flex space-x-4">
+                  <div class="flex items-center">
+                    <input type="checkbox" id="view-permission" checked class="mr-2">
+                    <label for="view-permission" class="text-sm">Allow View</label>
+                  </div>
+                  <div class="flex items-center">
+                    <input type="checkbox" id="edit-permission" class="mr-2">
+                    <label for="edit-permission" class="text-sm">Allow Edit</label>
+                  </div>
+                  <div class="flex items-center">
+                    <input type="checkbox" id="download-permission" class="mr-2">
+                    <label for="download-permission" class="text-sm">Allow Download</label>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <h3 class="font-medium mb-3">Current Collaborators</h3>
+                <div class="space-y-2">
+                  <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                    <div class="flex items-center">
+                      <div class="bg-blue-500 rounded-full w-8 h-8 flex items-center justify-center mr-3">
+                        <span class="font-bold">JD</span>
+                      </div>
+                      <div>
+                        <p>Jane Doe</p>
+                        <p class="text-xs text-gray-400">jane.doe@nasa.gov</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center">
+                      <span class="text-xs bg-green-800 text-green-200 px-2 py-1 rounded mr-2">Editor</span>
+                      <button class="text-gray-400 hover:text-red-500">
+                        <i class="fas fa-times"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                    <div class="flex items-center">
+                      <div class="bg-purple-500 rounded-full w-8 h-8 flex items-center justify-center mr-3">
+                        <span class="font-bold">MS</span>
+                      </div>
+                      <div>
+                        <p>Mark Smith</p>
+                        <p class="text-xs text-gray-400">m.smith@jaxa.jp</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center">
+                      <span class="text-xs bg-blue-800 text-blue-200 px-2 py-1 rounded mr-2">Viewer</span>
+                      <button class="text-gray-400 hover:text-red-500">
+                        <i class="fas fa-times"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="lg:col-span-1">
+            <div class="card p-6 mb-6 relative">
+              <div class="moon-texture"></div>
+              <h2 class="text-xl font-semibold mb-4 flex items-center">
+                <i class="fas fa-history mr-2 text-blue-400"></i>
+                Version History
+              </h2>
+              
+              <div class="space-y-3">
+                <div class="p-3 bg-gray-800 rounded-lg">
+                  <div class="flex justify-between">
+                    <p class="font-medium">Version 1.3</p>
+                    <p class="text-xs text-gray-400">Today, 10:24 AM</p>
+                  </div>
+                  <p class="text-sm text-gray-400 mt-1">Final DEM with ML refinement</p>
+                  <div class="mt-2 flex justify-between items-center">
+                    <span class="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded">Current</span>
+                    <button class="text-xs text-gray-400 hover:text-blue-400">Restore</button>
+                  </div>
+                </div>
+                <div class="p-3 bg-gray-800 rounded-lg">
+                  <div class="flex justify-between">
+                    <p class="font-medium">Version 1.2</p>
+                    <p class="text-xs text-gray-400">Yesterday</p>
+                  </div>
+                  <p class="text-sm text-gray-400 mt-1">Preliminary DEM</p>
+                  <div class="mt-2 flex justify-end">
+                    <button class="text-xs text-gray-400 hover:text-blue-400">Restore</button>
+                  </div>
+                </div>
+                <div class="p-3 bg-gray-800 rounded-lg">
+                  <div class="flex justify-between">
+                    <p class="font-medium">Version 1.1</p>
+                    <p class="text-xs text-gray-400">2 days ago</p>
+                  </div>
+                  <p class="text-sm text-gray-400 mt-1">Initial upload</p>
+                  <div class="mt-2 flex justify-end">
+                    <button class="text-xs text-gray-400 hover:text-blue-400">Restore</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="card p-6 relative">
+              <div class="moon-texture"></div>
+              <h2 class="text-xl font-semibold mb-4 flex items-center">
+                <i class="fas fa-cog mr-2 text-orange-400"></i>
+                Project Settings
+              </h2>
+              
+              <div class="mb-4">
+                <label class="block text-sm font-medium mb-1">Project Name</label>
+                <input type="text" value="Tycho Crater Analysis" class="w-full px-3 py-2 bg-gray-800 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400">
+              </div>
+              
+              <div class="mb-4">
+                <label class="block text-sm font-medium mb-1">Description</label>
+                <textarea class="w-full px-3 py-2 bg-gray-800 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 h-24">High-resolution DEM of Tycho crater central peak using LRO NAC imagery.</textarea>
+              </div>
+              
+              <div class="mb-4 flex items-center">
+                <input type="checkbox" id="pds4-toggle" class="mr-2">
+                <label for="pds4-toggle">PDS4 Compliant Metadata</label>
+              </div>
+              
+              <button class="w-full btn-primary rounded-lg py-3 px-4 font-bold flex items-center justify-center">
+                <i class="fas fa-save mr-2"></i> Save Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Processing Modal -->
+  <div id="processing-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
+    <div class="bg-gray-900 rounded-lg p-8 max-w-md w-full text-center relative">
+      <div class="moon-texture opacity-20"></div>
+      <h3 class="text-xl font-bold mb-4">Processing Your Lunar Image</h3>
+      <div class="lds-ring mb-6"><div></div><div></div><div></div><div></div></div>
+      <p class="mb-2" id="processing-status">Analyzing shadows and surface features...</p>
+      <div class="w-full bg-gray-800 rounded-full h-2 mb-6">
+        <div class="bg-blue-500 h-2 rounded-full" id="processing-progress" style="width: 25%"></div>
+      </div>
+      <p class="text-sm text-gray-400">This may take a few moments depending on image size and complexity</p>
+    </div>
+  </div>
+
+  <script id="app-script">
+    // Navigation Functionality
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize Moon Viewer
+      initMoonViewer();
+      
+      // Initialize navigation
+      const navItems = document.querySelectorAll('.nav-item');
+      const pages = document.querySelectorAll('.page-content');
+      const progressBar = document.querySelector('.progress-bar');
+      
+      navItems.forEach((item, index) => {
+        item.addEventListener('click', function() {
+          // Remove active class from all nav items
+          navItems.forEach(navItem => navItem.classList.remove('active'));
+          // Add active class to clicked nav item
+          this.classList.add('active');
+          
+          // Hide all pages
+          pages.forEach(page => page.classList.remove('active'));
+          // Show selected page
+          const pageId = this.getAttribute('data-page') + '-page';
+          document.getElementById(pageId).classList.add('active');
+          
+          // Update progress bar
+          const progress = ((index + 1) / navItems.length) * 100;
+          progressBar.style.width = `${progress}%`;
+          
+          // Hide mobile menu if it's open
+          const mobileMenu = document.getElementById('mobile-menu');
+          if (mobileMenu.classList.contains('block')) {
+            mobileMenu.classList.remove('block');
+            mobileMenu.classList.add('hidden');
+          }
+        });
+      });
+      
+      // Mobile menu toggle
+      const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+      const mobileMenu = document.getElementById('mobile-menu');
+      
+      mobileMenuToggle.addEventListener('click', function() {
+        if (mobileMenu.classList.contains('hidden')) {
+          mobileMenu.classList.remove('hidden');
+          mobileMenu.classList.add('block');
+        } else {
+          mobileMenu.classList.remove('block');
+          mobileMenu.classList.add('hidden');
+        }
+      });
+      
+      // Upload functionality
+      const uploadZone = document.getElementById('upload-zone');
+      const fileInput = document.getElementById('file-input');
+      const imagePreview = document.getElementById('image-preview');
+      const previewImg = document.getElementById('preview-img');
+      const fileName = document.getElementById('file-name');
+      const removeImage = document.getElementById('remove-image');
+      
+      uploadZone.addEventListener('click', function() {
+        fileInput.click();
+      });
+      
+      uploadZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.classList.add('dragover');
+      });
+      
+      uploadZone.addEventListener('dragleave', function() {
+        this.classList.remove('dragover');
+      });
+      
+      uploadZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+        
+        if (e.dataTransfer.files.length) {
+          handleFile(e.dataTransfer.files[0]);
+        }
+      });
+      
+      fileInput.addEventListener('change', function() {
+        if (this.files.length) {
+          handleFile(this.files[0]);
+        }
+      });
+      
+      function handleFile(file) {
+        if (file.type.match('image.*')) {
+          const reader = new FileReader();
+          
+          reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            fileName.textContent = file.name;
+            uploadZone.classList.add('hidden');
+            imagePreview.classList.remove('hidden');
+          }
+          
+          reader.readAsDataURL(file);
+        }
+      }
+      
+      removeImage.addEventListener('click', function() {
+        uploadZone.classList.remove('hidden');
+        imagePreview.classList.add('hidden');
+        fileInput.value = '';
+      });
+      
+      // Validate and proceed button
+      const validateBtn = document.getElementById('validate-btn');
+      validateBtn.addEventListener('click', function() {
+        showProcessingModal('Validating image and detecting shadows...', 15);
+        
+        // Simulate API call delay
+        setTimeout(function() {
+          updateProcessingStatus('Analyzing solar angle and metadata...', 45);
+          
+          setTimeout(function() {
+            updateProcessingStatus('Shadow detection complete!', 100);
+            
+            setTimeout(function() {
+              hideProcessingModal();
+              // Navigate to disparity map page
+              document.querySelector('.nav-item[data-page="disparity"]').click();
+            }, 1000);
+          }, 1500);
+        }, 2000);
+      });
+      
+      // Run photoclinometry button
+      const runPhotoclinometryBtn = document.getElementById('run-photoclinometry');
+      const disparityPreview = document.getElementById('disparity-preview');
+      const disparityControls = document.getElementById('disparity-controls');
+      
+      runPhotoclinometryBtn.addEventListener('click', function() {
+        showProcessingModal('Initializing photoclinometry analysis...', 20);
+        
+        setTimeout(function() {
+          updateProcessingStatus('Calculating surface normals...', 40);
+          
+          setTimeout(function() {
+            updateProcessingStatus('Generating disparity map...', 70);
+            
+            setTimeout(function() {
+              updateProcessingStatus('Finalizing results...', 95);
+              
+              setTimeout(function() {
+                hideProcessingModal();
+                // Show disparity map
+                disparityPreview.innerHTML = `
+                  <div class="bg-gray-800 w-full h-full rounded-lg flex flex-col items-center justify-center">
+                    <i class="fas fa-thermometer-full text-6xl mb-4 text-gradient-blue-orange"></i>
+                    <p class="text-gray-400">Disparity map visualization</p>
+                  </div>
+                `;
+                disparityControls.classList.remove('hidden');
+              }, 1000);
+            }, 1500);
+          }, 1500);
+        }, 1500);
+      });
+      
+      // Refine DEM button
+      const refineDemBtn = document.getElementById('refine-dem');
+      
+      refineDemBtn.addEventListener('click', function() {
+        showProcessingModal('Initializing sub-pixel refinement...', 10);
+        
+        setTimeout(function() {
+          updateProcessingStatus('Applying machine learning edge sharpening...', 40);
+          
+          setTimeout(function() {
+            updateProcessingStatus('Converting to absolute elevation values...', 70);
+            
+            setTimeout(function() {
+              updateProcessingStatus('Generating 3D model...', 90);
+              
+              setTimeout(function() {
+                hideProcessingModal();
+                // Navigate to validation page
+                document.querySelector('.nav-item[data-page="validation"]').click();
+              }, 1500);
+            }, 2000);
+          }, 2000);
+        }, 1500);
+      });
+      
+      // Run validation button
+      const runValidationBtn = document.getElementById('run-validation');
+      const accuracyChart = document.getElementById('accuracy-chart');
+      const demComparison = document.getElementById('dem-comparison');
+      const differenceMap = document.getElementById('difference-map');
+      const rmseValue = document.getElementById('rmse-value');
+      const meanErrorValue = document.getElementById('mean-error-value');
+      const maxDiffValue = document.getElementById('max-diff-value');
+      const elevRangeValue = document.getElementById('elev-range-value');
+      
+      runValidationBtn.addEventListener('click', function() {
+        showProcessingModal('Loading reference DEM...', 20);
+        
+        setTimeout(function() {
+          updateProcessingStatus('Calculating difference metrics...', 60);
+          
+          setTimeout(function() {
+            updateProcessingStatus('Generating comparison visualizations...', 90);
+            
+            setTimeout(function() {
+              hideProcessingModal();
+              
+              // Update the accuracy metrics
+              rmseValue.textContent = '2.4 m';
+              meanErrorValue.textContent = '0.8 m';
+              maxDiffValue.textContent = '12.6 m';
+              elevRangeValue.textContent = '847 m';
+              
+              // Create a basic plot with Plotly
+              const data = [{
+                x: ['Crater Rim', 'Crater Floor', 'Central Peak', 'Surrounding Mare'],
+                y: [3.2, 1.7, 4.5, 1.2],
+                type: 'bar',
+                marker: {
+                  color: ['rgba(0, 242, 255, 0.7)', 'rgba(0, 242, 255, 0.7)', 
+                          'rgba(255, 123, 0, 0.7)', 'rgba(0, 242, 255, 0.7)']
+                }
+              }];
+              
+              const layout = {
+                title: 'RMSE by Region (m)',
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: {
+                  color: '#e6f1ff'
+                },
+                margin: {
+                  l: 50,
+                  r: 30,
+                  b: 50,
+                  t: 40
+                }
+              };
+              
+              Plotly.newPlot(accuracyChart, data, layout);
+              
+              // Add the comparison and difference visualizations
+              demComparison.innerHTML = `
+                <div class="bg-gray-800 w-full h-full rounded-lg flex flex-col items-center justify-center p-6">
+                  <i class="fas fa-chart-area text-6xl mb-4 text-blue-400"></i>
+                  <p class="text-gray-400">DEM comparison visualization</p>
+                </div>
+              `;
+              differenceMap.innerHTML = `
+                <div class="bg-gray-800 w-full h-full rounded-lg flex flex-col items-center justify-center p-6">
+                  <i class="fas fa-map-marked-alt text-6xl mb-4 text-orange-400"></i>
+                  <p class="text-gray-400">Difference map visualization</p>
+                </div>
+              `;
+            }, 1500);
+          }, 2000);
+        }, 1500);
+      });
+      
+      // Generate PDF Report button
+      const generateReportBtn = document.getElementById('generate-report');
+      
+      generateReportBtn.addEventListener('click', function() {
+        showProcessingModal('Compiling validation data...', 30);
+        
+        setTimeout(function() {
+          updateProcessingStatus('Creating PDF document...', 70);
+          
+          setTimeout(function() {
+            hideProcessingModal();
+            
+            // Simulate PDF download
+            const link = document.createElement('a');
+            link.href = 'javascript:void(0)';
+            link.download = 'LunarMapper_Validation_Report.pdf';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }, 2000);
+        }, 1500);
+      });
+      
+      // Processing modal functions
+      function showProcessingModal(status, progress) {
+        const modal = document.getElementById('processing-modal');
+        const progressBar = document.getElementById('processing-progress');
+        const statusText = document.getElementById('processing-status');
+        
+        statusText.textContent = status;
+        progressBar.style.width = `${progress}%`;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+      
+      function updateProcessingStatus(status, progress) {
+        const progressBar = document.getElementById('processing-progress');
+        const statusText = document.getElementById('processing-status');
+        
+        statusText.textContent = status;
+        progressBar.style.width = `${progress}%`;
+      }
+      
+      function hideProcessingModal() {
+        const modal = document.getElementById('processing-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+      
+      // Initialize brightness/contrast sliders
+      const brightnessSlider = document.getElementById('brightness-slider');
+      const contrastSlider = document.getElementById('contrast-slider');
+      const originalImage = document.getElementById('original-image');
+      
+      if (brightnessSlider && contrastSlider && originalImage) {
+        function updateFilters() {
+          const brightness = brightnessSlider.value;
+          const contrast = contrastSlider.value;
+          originalImage.style.filter = `brightness(${brightness}%) contrast(${contrast}%)`;
+        }
+        
+        brightnessSlider.addEventListener('input', updateFilters);
+        contrastSlider.addEventListener('input', updateFilters);
+      }
+    });
+    
+    // Initialize 3D Moon Globe
+    function initMoonViewer() {
+      const container = document.getElementById('moonViewer');
+      if (!container) return;
+      
+      // Create scene
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+      
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      container.appendChild(renderer.domElement);
+      
+      // Add moon
+      const geometry = new THREE.SphereGeometry(5, 64, 64);
+      
+      // Create texture loader
+      const textureLoader = new THREE.TextureLoader();
+      
+      // Load moon texture (use a static moon texture from Pixabay)
+      const moonTexture = textureLoader.load(
+        'https://cdn.pixabay.com/photo/2018/03/14/15/51/moon-3225404_1280.jpg',
+        undefined,
+        undefined,
+        function() {
+          // Error handler - create a fallback texture with dark background and lighter crater marks
+          const canvas = document.createElement('canvas');
+          canvas.width = 512;
+          canvas.height = 512;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#111827';
+          ctx.fillRect(0, 0, 512, 512);
+          // Draw some random crater-like circles
+          for (let i = 0; i < 100; i++) {
+            const x = Math.random() * 512;
+            const y = Math.random() * 512;
+            const r = Math.random() * 20 + 5;
+            ctx.fillStyle = `rgba(150, 150, 150, ${Math.random() * 0.3 + 0.1})`;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          const fallbackTexture = new THREE.CanvasTexture(canvas);
+          material.map = fallbackTexture;
+          material.bumpMap = fallbackTexture;
+          material.needsUpdate = true;
+        }
+      );
+      
+      // Create material with the texture
+      const material = new THREE.MeshPhongMaterial({ 
+        map: moonTexture,
+        bumpMap: moonTexture,
+        bumpScale: 0.5
+      });
+      
+      const moon = new THREE.Mesh(geometry, material);
+      scene.add(moon);
+      
+      // Add ambient light
+      const ambientLight = new THREE.AmbientLight(0x404040);
+      scene.add(ambientLight);
+      
+      // Add directional light (sun)
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+      directionalLight.position.set(5, 3, 5);
+      scene.add(directionalLight);
+      
+      // Position camera
+      camera.position.z = 10;
+      
+      // Add controls
+      const controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.rotateSpeed = 0.5;
+      
+      // Animation loop
+      function animate() {
+        requestAnimationFrame(animate);
+        moon.rotation.y += 0.001;
+        controls.update();
+        renderer.render(scene, camera);
+      }
+      
+      animate();
+      
+      // Handle window resize
+      window.addEventListener('resize', function() {
+        if (container) {
+          camera.aspect = container.clientWidth / container.clientHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+      });
+    }
+  </script>
+</body>
+</html>
